@@ -175,27 +175,38 @@ def main():
             btn.draw(screen, font)
 
         # Draw word groups (right panel)
+        col = 0
         x_offset = panel_x
+        y_offset = start_y
+        col_width = 220
+        bottom_limit = HEIGHT - 80  # don't overflow past bottom
+
         for length in sorted(grouped.keys()):
             words_info = grouped[length]
             header_text = small_font.render(words_info["header"], True, DARK_GRAY)
-            screen.blit(header_text, (x_offset, start_y - 20))
 
-            col = 0
-            row = 0
-            for word in words_info["words"]:
+            # If adding this group would overflow, shift to next column
+            est_height = (len(words_info["words"]) + 2) * (LETTER_BOX_SIZE + 8)
+            if y_offset + est_height > bottom_limit:
+                col += 1
+                x_offset = panel_x + col * col_width
+                y_offset = start_y
+
+            # Draw header
+            screen.blit(header_text, (x_offset, y_offset))
+            y_offset += 25
+
+            # Draw words in boxes
+            for i, word in enumerate(words_info["words"]):
                 wg = next((g for g in word_groups if g.word == word), None)
                 if not wg:
-                    wg = WordGroup(word, x_offset, start_y + row * (LETTER_BOX_SIZE + 8))
+                    wg = WordGroup(word, x_offset, y_offset + i * (LETTER_BOX_SIZE + 8))
                     word_groups.append(wg)
                 wg.draw(screen, font)
 
-                row += 1
-                if row >= max_rows:
-                    row = 0
-                    col += 1
-                    x_offset = panel_x + col * col_width
-            x_offset = panel_x
+            # Push y_offset down for next header
+            y_offset += len(words_info["words"]) * (LETTER_BOX_SIZE + 8) + 40
+
 
         # Messages
         if message and message_timer > 0:
