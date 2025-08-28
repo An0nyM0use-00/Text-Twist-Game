@@ -1,7 +1,7 @@
 # 🧩 Text Twist (Python + Pygame)
 
 A mini word game inspired by the classic **Text Twist**.  
-The player is given a set of scrambled letters and must form as many valid words as possible from the dictionary within the time limit.
+The player is given a set of scrambled letters and must form as many valid words as possible from the dictionary.
 
 ---
 
@@ -21,7 +21,7 @@ The player is given a set of scrambled letters and must form as many valid words
 ---
 
 ## 🚀 How to Play
-1. Clone or download this repository  
+1. Clone or download this repository
 2. Install requirements:
    ```bash
    pip install pygame
