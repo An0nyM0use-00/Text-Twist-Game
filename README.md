@@ -15,7 +15,7 @@ The player is given a set of scrambled letters and must form as many valid words
 ---
 
 ## 🛠️ Tech Stack
-- Python 3.x  
+- Python 3.13.2
 - [Pygame](https://www.pygame.org/)
 
 ---
