@@ -9,8 +9,8 @@ pygame.init()
 # Constants
 WIDTH, HEIGHT = 1300, 700
 FONT_SIZE = 32
-LETTER_BOX_SIZE = 40
-BUTTON_SIZE = 60
+LETTER_BOX_SIZE = 35
+BUTTON_SIZE = 45
 BUTTON_MARGIN = 10
 FPS = 60
 
@@ -130,9 +130,9 @@ def main():
 
     # Action buttons
     submit_button = Button(100, 350, 120, 50, "SUBMIT", GREEN, (50, 230, 50), WHITE)
-    clear_button = Button(240, 350, 120, 50, "CLEAR", RED, (230, 50, 50), WHITE)
+    clear_button = Button(240, 350, 180, 50, "CLEAR", RED, (230, 50, 50), WHITE)
     shuffle_button = Button(100, 420, 120, 50, "SHUFFLE", YELLOW, (230, 200, 50), BLACK)
-    new_game_button = Button(240, 420, 120, 50, "NEW GAME", GRAY, DARK_GRAY, BLACK)
+    new_game_button = Button(240, 420, 180, 50, "NEW GAME", GRAY, DARK_GRAY, BLACK)
 
     # Group words by length
     word_groups = []
@@ -273,5 +273,5 @@ def main():
     pygame.quit()
     sys.exit()
 
-if __name__ == "__main__":
-    main()
+
+main()

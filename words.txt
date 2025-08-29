@@ -2,6 +2,7 @@ planet
 plan
 pane
 panel
+nepal
 pen
 pan
 lap
