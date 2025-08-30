@@ -197,8 +197,8 @@ def main():
             btn.check_hover(mouse_pos)
             btn.draw(screen, font)
         
-                # --- Draw word groups in the upper area ---
-        panel_x = 120
+        # --- Draw word groups in the upper area ---
+        panel_x = 70
         panel_y = 120
         panel_bottom = letters_y - 30
         row_height = LETTER_BOX_SIZE + 8
@@ -214,9 +214,8 @@ def main():
         x_cursor = panel_x
         for idx, l in enumerate(lengths_sorted):
             words_info = grouped[l]
-            header_text = small_font.render(words_info["header"], True, DARK_GRAY)
-            header_rect = header_text.get_rect(center=(x_cursor + col_widths[idx] // 2, panel_y - 20))
-            screen.blit(header_text, header_rect)
+
+            # ❌ Removed header text ("3-Letter Words", etc.)
 
             row = 0
             subcol = 0
@@ -238,6 +237,7 @@ def main():
             total_subcols = subcol + 1
             x_cursor += col_widths[idx] * total_subcols
         # --- end word groups ---
+
 
 
         # Messages
