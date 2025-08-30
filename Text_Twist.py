@@ -196,44 +196,33 @@ def main():
         for btn in (submit_button, clear_button, shuffle_button, new_game_button):
             btn.check_hover(mouse_pos)
             btn.draw(screen, font)
-
-        # --- Draw word groups in the upper area ---
-        # build fresh per-frame (so no stale positions)
-        panel_x = 120                # left margin for the word grid
-        panel_y = 120                # top offset for the word grid
-        panel_bottom = letters_y - 30     # keep a safe gap above letters/buttons
+        
+                # --- Draw word groups in the upper area ---
+        panel_x = 120
+        panel_y = 120
+        panel_bottom = letters_y - 30
         row_height = LETTER_BOX_SIZE + 8
-        # compute max rows that fits into available vertical space
         max_rows = max(1, (panel_bottom - panel_y) // row_height)
 
         lengths_sorted = sorted(grouped.keys())
-        # precompute column widths for each group (based on longest word)
         col_widths = []
         for l in lengths_sorted:
             words = grouped[l]["words"]
-            if words:
-                max_word_width = max(len(w) * (LETTER_BOX_SIZE + 5) for w in words)
-            else:
-                max_word_width = LETTER_BOX_SIZE
-            col_widths.append(max_word_width + 40)  # padding
+            max_word_len = max((len(w) for w in words), default=1)
+            col_widths.append(max_word_len * (LETTER_BOX_SIZE + 5) + 40)
 
-        # draw each group in its own column; each group wraps into sub-columns when tall
         x_cursor = panel_x
         for idx, l in enumerate(lengths_sorted):
             words_info = grouped[l]
-            x_offset = x_cursor
-            y_offset = panel_y
-
-            # Draw header (centered above group column)
             header_text = small_font.render(words_info["header"], True, DARK_GRAY)
-            header_rect = header_text.get_rect(center=(x_offset + col_widths[idx] // 2, y_offset - 10))
+            header_rect = header_text.get_rect(center=(x_cursor + col_widths[idx] // 2, panel_y - 20))
             screen.blit(header_text, header_rect)
 
             row = 0
             subcol = 0
             for word in words_info["words"]:
-                word_x = x_offset + subcol * col_widths[idx]
-                word_y = y_offset + row * row_height
+                word_x = x_cursor + subcol * col_widths[idx]
+                word_y = panel_y + row * row_height
 
                 wg = WordGroup(word, word_x, word_y)
                 if word in found_words:
@@ -245,10 +234,11 @@ def main():
                     row = 0
                     subcol += 1
 
-            # move cursor to next group's column
-            x_cursor += col_widths[idx]
-
+            # move to next group column (shift enough to include subcols if needed)
+            total_subcols = subcol + 1
+            x_cursor += col_widths[idx] * total_subcols
         # --- end word groups ---
+
 
         # Messages
         if message and message_timer > 0:
@@ -306,7 +296,7 @@ def main():
                     for i, button in enumerate(letter_buttons):
                         button.rect.x = start_x + i * (BUTTON_SIZE + BUTTON_MARGIN)
 
-                elif event.key == pygame.K_ESCAPE: # Esc → NEW GAME
+                elif event.key == pygame.K_ESCAPE:  # Esc → NEW GAME
                     return main()
 
             # --- Mouse input ---
@@ -356,6 +346,7 @@ def main():
             # New game
             if new_game_button.is_clicked(mouse_pos, event):
                 return main()
+
 
         pygame.display.flip()
         clock.tick(FPS)
