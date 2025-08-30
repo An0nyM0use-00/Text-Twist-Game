@@ -127,9 +127,22 @@ def main():
     message_color = BLACK
     current_guess = []  # track clicked letters in order
 
+    # --------------------- Layout control (tweak this) ---------------------
+    # Increase bottom_margin to move the whole bottom-block UP.
+    # Decrease bottom_margin to move it DOWN.
+    bottom_margin = 20        # space from window bottom to the bottom of the lower button row
+    button_height = 50
+    gap_between_button_rows = 10
+    gap_above_buttons_and_letters = 10
+    # ----------------------------------------------------------------------
+
+    # Calculate positions from bottom (keeps everything inside window)
+    btn_row2_y = HEIGHT - bottom_margin - button_height            # second row top Y
+    btn_row1_y = btn_row2_y - button_height - gap_between_button_rows
+    letters_y = btn_row1_y - gap_above_buttons_and_letters - BUTTON_SIZE  # letters sit above the first row
+
     # Bottom-centered letter buttons positions (compute once)
     total_width = len(letters) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
-    letters_y = HEIGHT - 140
     start_x = (WIDTH - total_width) // 2
 
     # Letter buttons (centered)
@@ -140,18 +153,15 @@ def main():
         letter_buttons.append(Button(x, y, BUTTON_SIZE, BUTTON_SIZE, letter.upper(), LIGHT_BLUE, BLUE, WHITE))
 
     # Action buttons (2 rows centered under letters)
-    btn_row1_y = HEIGHT - 90
-    btn_row2_y = HEIGHT - 40
-    # widths
     w1, w2 = 120, 180
     gap = 10
     row_total = w1 + gap + w2
     left_x = (WIDTH - row_total) // 2
 
-    submit_button = Button(left_x, btn_row1_y, w1, 50, "SUBMIT", GREEN, (50, 230, 50), WHITE)
-    clear_button = Button(left_x + w1 + gap, btn_row1_y, w2, 50, "CLEAR", RED, (230, 50, 50), WHITE)
-    shuffle_button = Button(left_x, btn_row2_y, w1, 50, "SHUFFLE", YELLOW, (230, 200, 50), BLACK)
-    new_game_button = Button(left_x + w1 + gap, btn_row2_y, w2, 50, "NEW GAME", GRAY, DARK_GRAY, BLACK)
+    submit_button = Button(left_x, btn_row1_y, w1, button_height, "SUBMIT", GREEN, (50, 230, 50), WHITE)
+    clear_button = Button(left_x + w1 + gap, btn_row1_y, w2, button_height, "CLEAR", RED, (230, 50, 50), WHITE)
+    shuffle_button = Button(left_x, btn_row2_y, w1, button_height, "SHUFFLE", YELLOW, (230, 200, 50), BLACK)
+    new_game_button = Button(left_x + w1 + gap, btn_row2_y, w2, button_height, "NEW GAME", GRAY, DARK_GRAY, BLACK)
 
     # Group words by length
     grouped = {}
@@ -174,7 +184,7 @@ def main():
 
         # Current guess (centered above letters)
         selected_text = font.render("".join(current_guess).upper(), True, BLACK)
-        text_rect = selected_text.get_rect(center=(WIDTH // 2, letters_y - 50))
+        text_rect = selected_text.get_rect(center=(WIDTH // 2, letters_y - 40))
         screen.blit(selected_text, text_rect)
 
         # Draw letter buttons (they remain centered)
@@ -189,11 +199,9 @@ def main():
 
         # --- Draw word groups in the upper area ---
         # build fresh per-frame (so no stale positions)
-        word_groups_draw = []
-
         panel_x = 120                # left margin for the word grid
         panel_y = 120                # top offset for the word grid
-        panel_bottom = letters_y - 70  # keep a safe gap above letters/buttons
+        panel_bottom = letters_y - 30     # keep a safe gap above letters/buttons
         row_height = LETTER_BOX_SIZE + 8
         # compute max rows that fits into available vertical space
         max_rows = max(1, (panel_bottom - panel_y) // row_height)
@@ -231,7 +239,6 @@ def main():
                 if word in found_words:
                     wg.fill_word()
                 wg.draw(screen, font)
-                word_groups_draw.append(wg)
 
                 row += 1
                 if row >= max_rows:
