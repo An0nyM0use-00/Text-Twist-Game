@@ -36,14 +36,16 @@ def generate_letters(word):
     random.shuffle(letters)
     return letters
 
-# Get all possible valid words
-def get_possible_words(letters, valid_words):
+# Get all possible valid words (ensure main_word included)
+def get_possible_words(letters, valid_words, main_word):
     possible_words = set()
     for i in range(3, len(letters) + 1):
         for perm in permutations(letters, i):
             possible_word = ''.join(perm)
             if possible_word in valid_words:
                 possible_words.add(possible_word)
+
+    possible_words.add(main_word)
     return sorted(possible_words, key=lambda w: (len(w), w))
 
 # Button class
@@ -61,7 +63,6 @@ class Button:
         color = DIM_BLUE if self.is_selected else (self.hover_color if self.is_hovered else self.color)
         pygame.draw.rect(surface, color, self.rect, border_radius=10)
         pygame.draw.rect(surface, BLACK, self.rect, 2, border_radius=10)
-
         text_surface = font.render(self.text, True, self.text_color)
         text_rect = text_surface.get_rect(center=self.rect.center)
         surface.blit(text_surface, text_rect)
@@ -91,6 +92,7 @@ class LetterBox:
 class WordGroup:
     def __init__(self, word, x, y):
         self.word = word
+        # each letter box placed horizontally
         self.boxes = [LetterBox(x + i * (LETTER_BOX_SIZE + 5), y, LETTER_BOX_SIZE) for i in range(len(word))]
 
     def draw(self, surface, font):
@@ -110,9 +112,14 @@ def main():
     small_font = pygame.font.Font(None, FONT_SIZE - 6)
 
     valid_words = load_words()
-    random_word = random.choice(valid_words)
+    six_letter_words = [w for w in valid_words if len(w) == 6]
+    if not six_letter_words:
+        raise RuntimeError("No 6-letter words found in words.txt")
+    random_word = random.choice(six_letter_words)
+
     letters = generate_letters(random_word)
-    possible_words = get_possible_words(letters, valid_words)
+    possible_words = get_possible_words(letters, valid_words, random_word)
+
     found_words = set()
     score = 0
     message = ""
@@ -120,51 +127,57 @@ def main():
     message_color = BLACK
     current_guess = []  # track clicked letters in order
 
-    # Letter buttons
+    # Bottom-centered letter buttons positions (compute once)
+    total_width = len(letters) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
+    letters_y = HEIGHT - 140
+    start_x = (WIDTH - total_width) // 2
+
+    # Letter buttons (centered)
     letter_buttons = []
-    start_x = 100
     for i, letter in enumerate(letters):
         x = start_x + i * (BUTTON_SIZE + BUTTON_MARGIN)
-        y = 250
+        y = letters_y
         letter_buttons.append(Button(x, y, BUTTON_SIZE, BUTTON_SIZE, letter.upper(), LIGHT_BLUE, BLUE, WHITE))
 
-    # Action buttons
-    submit_button = Button(100, 350, 120, 50, "SUBMIT", GREEN, (50, 230, 50), WHITE)
-    clear_button = Button(240, 350, 180, 50, "CLEAR", RED, (230, 50, 50), WHITE)
-    shuffle_button = Button(100, 420, 120, 50, "SHUFFLE", YELLOW, (230, 200, 50), BLACK)
-    new_game_button = Button(240, 420, 180, 50, "NEW GAME", GRAY, DARK_GRAY, BLACK)
+    # Action buttons (2 rows centered under letters)
+    btn_row1_y = HEIGHT - 90
+    btn_row2_y = HEIGHT - 40
+    # widths
+    w1, w2 = 120, 180
+    gap = 10
+    row_total = w1 + gap + w2
+    left_x = (WIDTH - row_total) // 2
+
+    submit_button = Button(left_x, btn_row1_y, w1, 50, "SUBMIT", GREEN, (50, 230, 50), WHITE)
+    clear_button = Button(left_x + w1 + gap, btn_row1_y, w2, 50, "CLEAR", RED, (230, 50, 50), WHITE)
+    shuffle_button = Button(left_x, btn_row2_y, w1, 50, "SHUFFLE", YELLOW, (230, 200, 50), BLACK)
+    new_game_button = Button(left_x + w1 + gap, btn_row2_y, w2, 50, "NEW GAME", GRAY, DARK_GRAY, BLACK)
 
     # Group words by length
-    word_groups = []
     grouped = {}
     for word in possible_words:
         grouped.setdefault(len(word), []).append(word)
-
-    # Layout word groups neatly in right panel
-    start_y = 120
-    panel_x = 500
-    col_width = 200
-    max_rows = 12
-    for length, words in grouped.items():
-        header = f"{length}-Letter Words"
-        grouped[length] = {"header": header, "words": words}
+    # convert to structure with headers
+    for length, words in list(grouped.items()):
+        grouped[length] = {"header": f"{length}-Letter Words", "words": words}
 
     running = True
     while running:
         mouse_pos = pygame.mouse.get_pos()
         screen.fill(WHITE)
 
-        # Title & Score
+        # Title & Score (top)
         title = font.render("TEXT TWIST", True, BLUE)
         screen.blit(title, (100, 50))
         score_text = font.render(f"Score: {score}", True, BLACK)
         screen.blit(score_text, (WIDTH - 200, 30))
 
-        # Current guess
+        # Current guess (centered above letters)
         selected_text = font.render("".join(current_guess).upper(), True, BLACK)
-        screen.blit(selected_text, (100, 200))
+        text_rect = selected_text.get_rect(center=(WIDTH // 2, letters_y - 50))
+        screen.blit(selected_text, text_rect)
 
-        # Draw letter buttons
+        # Draw letter buttons (they remain centered)
         for button in letter_buttons:
             button.check_hover(mouse_pos)
             button.draw(screen, font)
@@ -174,37 +187,61 @@ def main():
             btn.check_hover(mouse_pos)
             btn.draw(screen, font)
 
-        # Draw word groups (organized by length in columns)
-        base_x = panel_x
-        y_offset = start_y
-        col_width = 220
-        bottom_limit = HEIGHT - 80
+        # --- Draw word groups in the upper area ---
+        # build fresh per-frame (so no stale positions)
+        word_groups_draw = []
 
-        for idx, length in enumerate(sorted(grouped.keys())):
-            words_info = grouped[length]
-            col_x = base_x + idx * col_width
-            y_offset = start_y
+        panel_x = 120                # left margin for the word grid
+        panel_y = 120                # top offset for the word grid
+        panel_bottom = letters_y - 70  # keep a safe gap above letters/buttons
+        row_height = LETTER_BOX_SIZE + 8
+        # compute max rows that fits into available vertical space
+        max_rows = max(1, (panel_bottom - panel_y) // row_height)
 
-            # Draw header
+        lengths_sorted = sorted(grouped.keys())
+        # precompute column widths for each group (based on longest word)
+        col_widths = []
+        for l in lengths_sorted:
+            words = grouped[l]["words"]
+            if words:
+                max_word_width = max(len(w) * (LETTER_BOX_SIZE + 5) for w in words)
+            else:
+                max_word_width = LETTER_BOX_SIZE
+            col_widths.append(max_word_width + 40)  # padding
+
+        # draw each group in its own column; each group wraps into sub-columns when tall
+        x_cursor = panel_x
+        for idx, l in enumerate(lengths_sorted):
+            words_info = grouped[l]
+            x_offset = x_cursor
+            y_offset = panel_y
+
+            # Draw header (centered above group column)
             header_text = small_font.render(words_info["header"], True, DARK_GRAY)
-            screen.blit(header_text, (col_x, y_offset))
-            y_offset += 25
+            header_rect = header_text.get_rect(center=(x_offset + col_widths[idx] // 2, y_offset - 10))
+            screen.blit(header_text, header_rect)
 
-            # Draw words in boxes
+            row = 0
+            subcol = 0
             for word in words_info["words"]:
-                wg = next((g for g in word_groups if g.word == word), None)
-                if not wg:
-                    wg = WordGroup(word, col_x, y_offset)
-                    word_groups.append(wg)
+                word_x = x_offset + subcol * col_widths[idx]
+                word_y = y_offset + row * row_height
+
+                wg = WordGroup(word, word_x, word_y)
+                if word in found_words:
+                    wg.fill_word()
                 wg.draw(screen, font)
+                word_groups_draw.append(wg)
 
-                y_offset += LETTER_BOX_SIZE + 8
+                row += 1
+                if row >= max_rows:
+                    row = 0
+                    subcol += 1
 
-                # If we run out of vertical space, start new sub-column
-                if y_offset > bottom_limit:
-                    col_x += col_width // 2   # start half-width column beside it
-                    y_offset = start_y + 25
+            # move cursor to next group's column
+            x_cursor += col_widths[idx]
 
+        # --- end word groups ---
 
         # Messages
         if message and message_timer > 0:
@@ -217,13 +254,13 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
-            # Handle letter clicks (track order)
+            # Letter clicks (maintain click order)
             for button in letter_buttons:
                 if button.is_clicked(mouse_pos, event):
-                    if not button.is_selected:  # select
+                    if not button.is_selected:
                         button.is_selected = True
                         current_guess.append(button.text.lower())
-                    else:  # deselect
+                    else:
                         button.is_selected = False
                         if button.text.lower() in current_guess:
                             current_guess.remove(button.text.lower())
@@ -237,9 +274,6 @@ def main():
                     message = f"Good! +{len(guess)*10} points"
                     message_color = GREEN
                     message_timer = 60
-                    for wg in word_groups:
-                        if wg.word == guess:
-                            wg.fill_word()
                 else:
                     message = "Invalid guess!"
                     message_color = RED
@@ -256,14 +290,16 @@ def main():
                 for b in letter_buttons:
                     b.is_selected = False
 
-            # Shuffle letters
+            # Shuffle letters (shuffle objects and reposition)
             if shuffle_button.is_clicked(mouse_pos, event):
                 random.shuffle(letter_buttons)
-                start_x = 100
+                # reposition centered
+                total_width = len(letter_buttons) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
+                start_x = (WIDTH - total_width) // 2
                 for i, button in enumerate(letter_buttons):
                     button.rect.x = start_x + i * (BUTTON_SIZE + BUTTON_MARGIN)
 
-            # New game
+            # New game (start over)
             if new_game_button.is_clicked(mouse_pos, event):
                 return main()
 
@@ -273,5 +309,5 @@ def main():
     pygame.quit()
     sys.exit()
 
-
-main()
+if __name__ == "__main__":
+    main()
