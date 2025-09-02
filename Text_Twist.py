@@ -267,7 +267,7 @@ def main():
                                 if button.text.lower() in current_guess:
                                     current_guess.remove(button.text.lower())
 
-                elif event.key == pygame.K_RETURN:  # Enter → SUBMIT
+                elif event.key == pygame.K_RETURN :  # Enter → SUBMIT
                     guess = "".join(current_guess)
                     if guess in possible_words and guess not in found_words:
                         found_words.add(guess)
