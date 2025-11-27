@@ -1,5 +1,3 @@
-# text_twist_full.py  (PART 1/2)
-# Full Text Twist game — Difficulty (4-7 letters), modern UI, animations, high scores.
 import pygame
 import random
 import sys
