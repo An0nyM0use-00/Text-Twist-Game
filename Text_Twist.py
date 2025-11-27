@@ -3,7 +3,6 @@ import random
 import sys
 from itertools import permutations
 
-# Initialize Pygame
 pygame.init()
 
 # Constants
@@ -36,7 +35,7 @@ def generate_letters(word):
     random.shuffle(letters)
     return letters
 
-# Get all possible valid words (ensure main_word included)
+# All valid permutations of letters
 def get_possible_words(letters, valid_words, main_word):
     possible_words = set()
     for i in range(3, len(letters) + 1):
@@ -92,7 +91,6 @@ class LetterBox:
 class WordGroup:
     def __init__(self, word, x, y):
         self.word = word
-        # each letter box placed horizontally
         self.boxes = [LetterBox(x + i * (LETTER_BOX_SIZE + 5), y, LETTER_BOX_SIZE) for i in range(len(word))]
 
     def draw(self, surface, font):
@@ -125,34 +123,36 @@ def main():
     message = ""
     message_timer = 0
     message_color = BLACK
-    current_guess = []  # track clicked letters in order
+    current_guess = []
 
-    # --------------------- Layout control (tweak this) ---------------------
-    # Increase bottom_margin to move the whole bottom-block UP.
-    # Decrease bottom_margin to move it DOWN.
-    bottom_margin = 20        # space from window bottom to the bottom of the lower button row
+    # ---------------- NEW TIMER SYSTEM ----------------
+    timer_seconds = len(possible_words) * 9
+    timer_font = pygame.font.Font(None, 40)
+    time_bonus_per_letter = 2
+    game_over = False
+    # --------------------------------------------------
+
+    # Layout
+    bottom_margin = 20
     button_height = 50
     gap_between_button_rows = 10
     gap_above_buttons_and_letters = 10
-    # ----------------------------------------------------------------------
 
-    # Calculate positions from bottom (keeps everything inside window)
-    btn_row2_y = HEIGHT - bottom_margin - button_height            # second row top Y
+    btn_row2_y = HEIGHT - bottom_margin - button_height
     btn_row1_y = btn_row2_y - button_height - gap_between_button_rows
-    letters_y = btn_row1_y - gap_above_buttons_and_letters - BUTTON_SIZE  # letters sit above the first row
+    letters_y = btn_row1_y - gap_above_buttons_and_letters - BUTTON_SIZE
 
-    # Bottom-centered letter buttons positions (compute once)
     total_width = len(letters) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
     start_x = (WIDTH - total_width) // 2
 
-    # Letter buttons (centered)
+    # Letter buttons
     letter_buttons = []
     for i, letter in enumerate(letters):
         x = start_x + i * (BUTTON_SIZE + BUTTON_MARGIN)
         y = letters_y
         letter_buttons.append(Button(x, y, BUTTON_SIZE, BUTTON_SIZE, letter.upper(), LIGHT_BLUE, BLUE, WHITE))
 
-    # Action buttons (2 rows centered under letters)
+    # Action buttons
     w1, w2 = 120, 180
     gap = 10
     row_total = w1 + gap + w2
@@ -167,27 +167,59 @@ def main():
     grouped = {}
     for word in possible_words:
         grouped.setdefault(len(word), []).append(word)
-    # convert to structure with headers
     for length, words in list(grouped.items()):
         grouped[length] = {"header": f"{length}-Letter Words", "words": words}
+
+    # ----------- NEW Horizontal Scroll Control -------------
+    scroll_offset = 0
+    scroll_speed = 40
+    # --------------------------------------------------------
 
     running = True
     while running:
         mouse_pos = pygame.mouse.get_pos()
         screen.fill(WHITE)
 
-        # Title & Score (top)
+        # GAME OVER SCREEN
+        if game_over:
+            over_text = font.render("GAME OVER!", True, RED)
+            screen.blit(over_text, (WIDTH // 2 - 80, HEIGHT // 2 - 30))
+
+            timer_text = timer_font.render(f"Final Score: {score}", True, BLACK)
+            screen.blit(timer_text, (WIDTH // 2 - 100, HEIGHT // 2 + 20))
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    running = False
+                if new_game_button.is_clicked(mouse_pos, event):
+                    return main()
+
+            new_game_button.check_hover(mouse_pos)
+            new_game_button.draw(screen, font)
+
+            pygame.display.flip()
+            clock.tick(FPS)
+            continue
+
+        # Title
         title = font.render("TEXT TWIST", True, BLUE)
         screen.blit(title, (100, 50))
+
+        # Score
         score_text = font.render(f"Score: {score}", True, BLACK)
         screen.blit(score_text, (WIDTH - 200, 30))
 
-        # Current guess (centered above letters)
+        # Timer
+        timer_color = RED if timer_seconds <= 10 else BLACK
+        timer_text = timer_font.render(f"Time: {timer_seconds}", True, timer_color)
+        screen.blit(timer_text, (WIDTH - 200, 70))
+
+        # Selected letters
         selected_text = font.render("".join(current_guess).upper(), True, BLACK)
         text_rect = selected_text.get_rect(center=(WIDTH // 2, letters_y - 40))
         screen.blit(selected_text, text_rect)
 
-        # Draw letter buttons (they remain centered)
+        # Draw letter buttons
         for button in letter_buttons:
             button.check_hover(mouse_pos)
             button.draw(screen, font)
@@ -196,9 +228,9 @@ def main():
         for btn in (submit_button, clear_button, shuffle_button, new_game_button):
             btn.check_hover(mouse_pos)
             btn.draw(screen, font)
-        
-                # --- Draw word groups in the upper area ---
-        panel_x = 40
+
+        # Draw word groups
+        panel_x = 40 - scroll_offset
         panel_y = 120
         panel_bottom = letters_y - 30
         row_height = LETTER_BOX_SIZE + 8
@@ -212,8 +244,11 @@ def main():
             col_widths.append(max_word_len * (LETTER_BOX_SIZE + 5) + 40)
 
         x_cursor = panel_x
+        max_right = 0
+
         for idx, l in enumerate(lengths_sorted):
             words_info = grouped[l]
+
             header_text = small_font.render(words_info["header"], True, DARK_GRAY)
             header_rect = header_text.get_rect(center=(x_cursor + col_widths[idx] // 2, panel_y - 20))
             screen.blit(header_text, header_rect)
@@ -234,11 +269,12 @@ def main():
                     row = 0
                     subcol += 1
 
-            # move to next group column (shift enough to include subcols if needed)
-            total_subcols = subcol + .9
+            total_subcols = subcol + 1
             x_cursor += col_widths[idx] * total_subcols
-        # --- end word groups ---
+            max_right = max(max_right, x_cursor)
 
+        # Clamp scroll
+        scroll_offset = max(0, min(scroll_offset, max_right - WIDTH + 100))
 
         # Messages
         if message and message_timer > 0:
@@ -247,36 +283,44 @@ def main():
             message_timer -= 1
 
         # Events
-                # Events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-            # --- Keyboard input ---
+            # Scroll wheel
+            if event.type == pygame.MOUSEWHEEL:
+                scroll_offset -= event.y * scroll_speed
+
+            # Letter key input
             if event.type == pygame.KEYDOWN:
                 key = event.unicode.lower()
 
-                if key.isalpha():  # letter keys
+                if key.isalpha():
                     for button in letter_buttons:
-                        if button.text.lower() == key:
-                            if not button.is_selected:
-                                button.is_selected = True
-                                current_guess.append(button.text.lower())
-                            else:
-                                button.is_selected = False
-                                if button.text.lower() in current_guess:
-                                    current_guess.remove(button.text.lower())
+                        if button.text.lower() == key and not button.is_selected:
+                            button.is_selected = True
+                            current_guess.append(button.text.lower())
 
-                elif event.key == pygame.K_RETURN:  # Enter → SUBMIT
+                elif event.key == pygame.K_RETURN:
                     guess = "".join(current_guess)
-                    if guess in possible_words and guess not in found_words:
+
+                    # -------- BONUS WORD CHECK (not in possible list but valid) --------
+                    if guess in valid_words and guess not in possible_words:
+                        score += len(guess) * 5
+                        timer_seconds += len(guess)
+                        message = f"Bonus +{len(guess)*5} pts +{len(guess)}s"
+                        message_color = BLUE
+                        message_timer = 60
+                    # -------- Normal visible-word scoring --------
+                    elif guess in possible_words and guess not in found_words:
                         found_words.add(guess)
                         score += len(guess) * 10
-                        message = f"Good! +{len(guess)*10} points"
+                        timer_seconds += len(guess) * time_bonus_per_letter
+                        message = f"Good! +{len(guess)*10} pts +{len(guess)*time_bonus_per_letter}s"
                         message_color = GREEN
                         message_timer = 60
                     else:
-                        message = "Invalid guess!"
+                        message = "Invalid!"
                         message_color = RED
                         message_timer = 60
 
@@ -284,23 +328,22 @@ def main():
                     for b in letter_buttons:
                         b.is_selected = False
 
-                elif event.key == pygame.K_BACKSPACE:  # Backspace → CLEAR
+                elif event.key == pygame.K_BACKSPACE:
                     current_guess = []
                     for b in letter_buttons:
                         b.is_selected = False
 
-                elif event.key == pygame.K_SPACE:  # Space → SHUFFLE
+                elif event.key == pygame.K_SPACE:
                     random.shuffle(letter_buttons)
                     total_width = len(letter_buttons) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
                     start_x = (WIDTH - total_width) // 2
                     for i, button in enumerate(letter_buttons):
                         button.rect.x = start_x + i * (BUTTON_SIZE + BUTTON_MARGIN)
 
-                elif event.key == pygame.K_ESCAPE:  # Esc → NEW GAME
+                elif event.key == pygame.K_ESCAPE:
                     return main()
 
-            # --- Mouse input ---
-            # Letter clicks
+            # Mouse click on letter buttons
             for button in letter_buttons:
                 if button.is_clicked(mouse_pos, event):
                     if not button.is_selected:
@@ -311,17 +354,27 @@ def main():
                         if button.text.lower() in current_guess:
                             current_guess.remove(button.text.lower())
 
-            # Submit guess
+            # Submit button
             if submit_button.is_clicked(mouse_pos, event):
                 guess = "".join(current_guess)
-                if guess in possible_words and guess not in found_words:
+
+                # BONUS WORD
+                if guess in valid_words and guess not in possible_words:
+                    score += len(guess) * 5
+                    timer_seconds += len(guess)
+                    message = f"Bonus +{len(guess)*5} pts +{len(guess)}s"
+                    message_color = BLUE
+                    message_timer = 60
+
+                elif guess in possible_words and guess not in found_words:
                     found_words.add(guess)
                     score += len(guess) * 10
-                    message = f"Good! +{len(guess)*10} points"
+                    timer_seconds += len(guess) * time_bonus_per_letter
+                    message = f"Good! +{len(guess)*10} pts +{len(guess)*time_bonus_per_letter}s"
                     message_color = GREEN
                     message_timer = 60
                 else:
-                    message = "Invalid guess!"
+                    message = "Invalid!"
                     message_color = RED
                     message_timer = 60
 
@@ -329,13 +382,13 @@ def main():
                 for b in letter_buttons:
                     b.is_selected = False
 
-            # Clear guess
+            # Clear
             if clear_button.is_clicked(mouse_pos, event):
                 current_guess = []
                 for b in letter_buttons:
                     b.is_selected = False
 
-            # Shuffle letters
+            # Shuffle
             if shuffle_button.is_clicked(mouse_pos, event):
                 random.shuffle(letter_buttons)
                 total_width = len(letter_buttons) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
@@ -347,12 +400,19 @@ def main():
             if new_game_button.is_clicked(mouse_pos, event):
                 return main()
 
+        # -------- TIMER COUNTDOWN --------
+        if pygame.time.get_ticks() % 1000 < 20:
+            timer_seconds -= 1
+            if timer_seconds <= 0:
+                timer_seconds = 0
+                game_over = True
 
         pygame.display.flip()
         clock.tick(FPS)
 
     pygame.quit()
     sys.exit()
+
 
 if __name__ == "__main__":
     main()
