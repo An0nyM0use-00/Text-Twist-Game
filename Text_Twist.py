@@ -15,7 +15,7 @@ BUTTON_SIZE = 52
 BUTTON_MARGIN = 12
 FPS = 60
 
-# Colors (palette)
+# Colors
 WHITE = (250, 250, 250)
 BLACK = (20, 20, 20)
 GREEN = (100, 200, 100)
@@ -35,14 +35,12 @@ WORDS_FILE = "words.txt"
 
 # ---------------- Utilities ----------------
 def load_words():
-    """Load words from WORDS_FILE into a sorted unique list (lowercase)."""
     if not os.path.exists(WORDS_FILE):
-        raise FileNotFoundError(f"{WORDS_FILE} not found in working directory.")
+        raise FileNotFoundError(f"{WORDS_FILE} not found.")
     with open(WORDS_FILE, encoding="utf-8") as f:
         return sorted({w.strip().lower() for w in f if w.strip()})
 
 def load_scores():
-    """Load leaderboard from SCORES_FILE (returns list)."""
     if not os.path.exists(SCORES_FILE):
         return []
     try:
@@ -52,7 +50,6 @@ def load_scores():
         return []
 
 def save_score(name, score):
-    """Save a name+score to SCORES_FILE and keep top 20."""
     scores = load_scores()
     scores.append({"name": name, "score": score})
     scores = sorted(scores, key=lambda s: s["score"], reverse=True)[:20]
@@ -62,16 +59,11 @@ def save_score(name, score):
 
 # ---------------- Game Helpers --------------
 def generate_letters(word):
-    """Return a shuffled list of letters from word."""
     letters = list(word)
     random.shuffle(letters)
     return letters
 
 def get_possible_words(letters, valid_words, main_word):
-    """
-    Compute all valid permutations (length >=3) from letters that exist in valid_words.
-    Ensure the main_word is included.
-    """
     possible_words = set()
     for i in range(3, len(letters) + 1):
         for perm in permutations(letters, i):
@@ -84,7 +76,6 @@ def get_possible_words(letters, valid_words, main_word):
 
 # ---------------- UI Classes ----------------
 class Button:
-    """Simple rectangular button with hover/selected state."""
     def __init__(self, x, y, width, height, text, color, hover_color, text_color=BLACK):
         self.rect = pygame.Rect(x, y, width, height)
         self.text = text
@@ -97,7 +88,7 @@ class Button:
     def draw(self, surface, font, radius=10):
         color = DIM_BLUE if self.is_selected else (self.hover_color if self.is_hovered else self.color)
         pygame.draw.rect(surface, color, self.rect, border_radius=radius)
-        pygame.draw.rect(surface, (30,30,30), self.rect, 2, border_radius=radius)
+        pygame.draw.rect(surface, DARK_GRAY, self.rect, 2, border_radius=radius)
         text_surface = font.render(self.text, True, self.text_color)
         text_rect = text_surface.get_rect(center=self.rect.center)
         surface.blit(text_surface, text_rect)
@@ -110,7 +101,6 @@ class Button:
         return event.type == pygame.MOUSEBUTTONDOWN and event.button == 1 and self.rect.collidepoint(pos)
 
 class LetterBox:
-    """Single square box which can hold a letter."""
     def __init__(self, x, y, size):
         self.rect = pygame.Rect(x, y, size, size)
         self.letter = ""
@@ -124,7 +114,6 @@ class LetterBox:
             surface.blit(text_surface, text_rect)
 
 class WordGroup:
-    """Represents a horizontal series of LetterBoxes for a word."""
     def __init__(self, word, x, y):
         self.word = word
         self.boxes = [LetterBox(x + i * (LETTER_BOX_SIZE + 6), y, LETTER_BOX_SIZE) for i in range(len(word))]
@@ -141,19 +130,14 @@ class WordGroup:
 
 # ---------------- Difficulty Menu -----------
 def difficulty_menu(screen, clock, fonts):
-    """
-    Show difficulty selection cards.
-    Returns chosen word length (4,5,6,7).
-    """
     font, small_font, big_font = fonts
     options = [("Easy", 4), ("Normal", 5), ("Hard", 6), ("Extreme", 7)]
-    selected = 1  # default "Normal"
+    selected = 1
     running = True
     while running:
         mouse = pygame.mouse.get_pos()
         screen.fill(PANEL_BG)
-
-        # Title card
+        # Title
         title_rect = pygame.Rect(120, 40, WIDTH - 240, 120)
         pygame.draw.rect(screen, WHITE, title_rect, border_radius=16)
         pygame.draw.rect(screen, DARK_GRAY, title_rect, 2, border_radius=16)
@@ -162,7 +146,7 @@ def difficulty_menu(screen, clock, fonts):
         subtitle = small_font.render("Choose difficulty (word length)", True, DARK_GRAY)
         screen.blit(subtitle, subtitle.get_rect(center=(WIDTH//2, 120)))
 
-        # Option cards
+        # Options
         card_w = 220
         gap = 28
         total_w = len(options) * card_w + (len(options)-1) * gap
@@ -181,7 +165,6 @@ def difficulty_menu(screen, clock, fonts):
             hint = small_font.render("Click or press 1-4", True, DARK_GRAY)
             screen.blit(hint, hint.get_rect(center=(x + card_w//2, y + 114)))
 
-        # Footer
         footer = small_font.render("Press ENTER to start with selected difficulty", True, DARK_GRAY)
         screen.blit(footer, footer.get_rect(center=(WIDTH//2, HEIGHT - 80)))
 
@@ -213,12 +196,10 @@ def difficulty_menu(screen, clock, fonts):
                     if rect.collidepoint((mx, my)):
                         return options[idx][1]
         clock.tick(FPS)
+# -------------------------------------------
+
+# ---------------- Main Game ----------------
 def main_game(word_length):
-    """
-    Main game loop using chosen word_length.
-    Left panel shows word groups (scrollable), right area has guess capsule and letters.
-    """
-    # Fonts
     font = pygame.font.Font(None, FONT_SIZE)
     small_font = pygame.font.Font(None, FONT_SIZE - 6)
     big_font = pygame.font.Font(None, 56)
@@ -227,56 +208,45 @@ def main_game(word_length):
     pygame.display.set_caption("Text Twist")
     clock = pygame.time.Clock()
 
-    # Load dictionary and pick candidate words of the chosen length
     valid_words = load_words()
     candidates = [w for w in valid_words if len(w) == word_length]
     if not candidates:
-        # fallback to 6-letter words if chosen length not present
         candidates = [w for w in valid_words if len(w) == 6]
         if not candidates:
-            raise RuntimeError("No suitable words found in words.txt")
-
+            raise RuntimeError("No suitable words found.")
     random_word = random.choice(candidates)
     letters = generate_letters(random_word)
     possible_words = get_possible_words(letters, valid_words, random_word)
 
-    # Layout split: left panel for words, right for guess/letters
     left_panel_w = min(760, WIDTH - 420)
     right_panel_x = left_panel_w + 40
 
-    # Game state
     found_words = set()
-    bonus_found = set()   # bonus dictionary words claimed
+    bonus_found = set()
     score = 0
     message = ""
     message_timer = 0
     message_color = BLACK
     current_guess = []
 
-    # Timer and bonuses
     timer_seconds = max(10, len(possible_words) * 9)
     timer_font = pygame.font.Font(None, 40)
     time_bonus_per_letter = 2
     game_over = False
 
-    # Bottom positions for letters
     bottom_margin = 20
     button_height = 50
     gap_above_letters = 18
     letters_y = HEIGHT - bottom_margin - button_height - BUTTON_SIZE - gap_above_letters
-
-    # Center letter buttons horizontally in the right area
     total_width = len(letters) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
     start_x = max(right_panel_x + (WIDTH - right_panel_x - total_width)//2, (WIDTH - total_width)//2)
 
-    # Create letter buttons
     letter_buttons = []
     for i, letter in enumerate(letters):
         x = start_x + i * (BUTTON_SIZE + BUTTON_MARGIN)
         y = letters_y
         letter_buttons.append(Button(x, y, BUTTON_SIZE, BUTTON_SIZE, letter.upper(), LIGHT_BLUE, BLUE, WHITE))
 
-    # Action buttons: single row bottom
     act_w = 140
     gap = 20
     actions_total = 3 * act_w + 2*gap
@@ -286,23 +256,18 @@ def main_game(word_length):
     shuffle_button = Button(left_x + 2*(act_w + gap), HEIGHT - bottom_margin - button_height, act_w, button_height, "SHUFFLE", YELLOW, (230, 200, 50), BLACK)
     new_game_button = Button(WIDTH - 180, 28, 140, 42, "NEW GAME", GRAY, DARK_GRAY, BLACK)
 
-    # Group possible words by length for the left panel
     grouped = {}
     for word in possible_words:
         grouped.setdefault(len(word), []).append(word)
     for length, words in list(grouped.items()):
         grouped[length] = {"header": f"{length}-Letter Words", "words": words}
 
-    # Build visible_required_words list for completion detection
     visible_required_words = []
     for length in sorted(grouped.keys()):
         visible_required_words.extend(grouped[length]["words"])
 
-    # Scrolling state for left panel
     scroll_offset = 0
     scroll_speed = 40
-
-    # Animations: floating point texts and reveal animations per word
     floating_texts = []
     reveal_animations = {}
     last_tick = pygame.time.get_ticks()
@@ -323,13 +288,12 @@ def main_game(word_length):
         mouse_pos = pygame.mouse.get_pos()
         screen.fill(PANEL_BG)
 
-        # Top bar
+        # --- Top bar ---
         top_bar = pygame.Rect(20, 16, WIDTH - 40, 88)
         pygame.draw.rect(screen, WHITE, top_bar, border_radius=14)
         pygame.draw.rect(screen, DARK_GRAY, top_bar, 2, border_radius=14)
         title = big_font.render("TEXT TWIST", True, BLUE)
         screen.blit(title, (40, 30))
-        # Timer and score in top bar
         timer_color = RED if timer_seconds <= 10 else BLACK
         timer_text = timer_font.render(f"Time: {timer_seconds}", True, timer_color)
         score_text = font.render(f"Score: {score}", True, BLACK)
@@ -338,24 +302,21 @@ def main_game(word_length):
         new_game_button.check_hover(mouse_pos)
         new_game_button.draw(screen, font, radius=12)
 
-        # Left panel for words
+        # --- Left panel ---
         left_rect = pygame.Rect(20, 120, left_panel_w, HEIGHT - 180)
         pygame.draw.rect(screen, WHITE, left_rect, border_radius=12)
         pygame.draw.rect(screen, DARK_GRAY, left_rect, 2, border_radius=12)
         panel_title = small_font.render("Words", True, DARK_GRAY)
-        screen.blit(panel_title, (left_rect.x + 16, left_rect.y + 12))
+        screen.blit(panel_title, (left_rect.x + 16, left_rect.y + 16))  # shifted down
 
-        # Content area inside left panel
         content_x = left_rect.x + 12
-        content_y = left_rect.y + 44
+        content_y = left_rect.y + 52
         content_w = left_rect.width - 24
         content_h = left_rect.height - 56
 
-        # Draw word groups inside left panel with horizontal columns and scrolling
         row_height = LETTER_BOX_SIZE + 10
         max_rows = max(1, content_h // row_height)
         lengths_sorted = sorted(grouped.keys())
-
         col_widths = []
         for l in lengths_sorted:
             words = grouped[l]["words"]
@@ -375,19 +336,15 @@ def main_game(word_length):
             for word in words_info["words"]:
                 word_x = x_cursor + subcol * col_widths[idx]
                 word_y = content_y + row * row_height
-
                 wg = WordGroup(word, word_x, word_y)
-
-                # If the word is found (visible or bonus), run reveal animation
+                # reveal logic
                 if word in found_words or word in bonus_found:
                     anim = reveal_animations.get(word)
                     if not anim:
                         reveal_animations[word] = {"tick": 0, "max_tick": 12 + len(word)*4}
                         anim = reveal_animations[word]
-                    prog = anim["tick"] / anim["max_tick"]
+                    prog = anim["tick"]/anim["max_tick"]
                     reveal_count = int(prog * len(word))
-                    reveal_count = max(0, min(len(word), reveal_count))
-                    # draw boxes and letters progressively
                     for i, box in enumerate(wg.boxes):
                         pygame.draw.rect(screen, WHITE, box.rect, border_radius=6)
                         border_color = GOLD if (anim["tick"] < anim["max_tick"] and (anim["tick"]//3)%2 == 0) else DARK_GRAY
@@ -397,7 +354,6 @@ def main_game(word_length):
                             screen.blit(txt, txt.get_rect(center=box.rect.center))
                     anim["tick"] += 1
                     if anim["tick"] > anim["max_tick"]:
-                        # finalize fill to keep letters visible
                         for i, ch in enumerate(word):
                             wg.boxes[i].letter = ch
                 else:
@@ -407,14 +363,11 @@ def main_game(word_length):
                 if row >= max_rows:
                     row = 0
                     subcol += 1
-
             total_subcols = subcol + 1
             x_cursor += col_widths[idx] * total_subcols
             max_right = max(max_right, x_cursor)
 
-        # clamp left panel horizontal scroll
         scroll_offset = max(0, min(scroll_offset, max(0, max_right - content_x - content_w + 40)))
-
         # Right panel: guess area
         guess_card = pygame.Rect(right_panel_x, 140, WIDTH - right_panel_x - 40, 160)
         pygame.draw.rect(screen, WHITE, guess_card, border_radius=12)
@@ -705,16 +658,15 @@ def main_game(word_length):
                             if ch.isprintable() and len(name) < 12:
                                 name += ch
                 clock.tick(FPS)
-
+        
         pygame.display.flip()
         clock.tick(FPS)
-
     pygame.quit()
     sys.exit()
+# -------------------------------------------
 
 # ---------------- App Entrypoint ----------------
 def run():
-    # Initialize a small surface for the menu and pass fonts
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Text Twist")
     clock = pygame.time.Clock()
@@ -729,3 +681,4 @@ def run():
 
 if __name__ == "__main__":
     run()
+
