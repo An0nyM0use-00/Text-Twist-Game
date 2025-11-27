@@ -26,6 +26,7 @@ DIM_BLUE = (100, 150, 200)
 YELLOW = (250, 200, 50)
 GRAY = (220, 220, 220)
 DARK_GRAY = (80, 80, 80)
+GOLD = (245, 210, 90)
 
 SCORES_FILE = "scores.json"
 WORDS_FILE = "words.txt"
@@ -49,7 +50,7 @@ def load_scores():
 def save_score(name, score):
     scores = load_scores()
     scores.append({"name": name, "score": score})
-    scores = sorted(scores, key=lambda s: s["score"], reverse=True)[:20]  # keep top 20
+    scores = sorted(scores, key=lambda s: s["score"], reverse=True)[:20]
     with open(SCORES_FILE, "w", encoding="utf-8") as f:
         json.dump(scores, f, indent=4)
 # -------------------------------------------
@@ -114,6 +115,8 @@ class WordGroup:
     def __init__(self, word, x, y):
         self.word = word
         self.boxes = [LetterBox(x + i * (LETTER_BOX_SIZE + 5), y, LETTER_BOX_SIZE) for i in range(len(word))]
+        # animation state per instance when revealed
+        self.revealed = False
 
     def draw(self, surface, font):
         for box in self.boxes:
@@ -143,14 +146,15 @@ def main():
     possible_words = get_possible_words(letters, valid_words, random_word)
 
     found_words = set()
+    bonus_found = set()   # track already-claimed bonus words
     score = 0
     message = ""
     message_timer = 0
     message_color = BLACK
-    current_guess = []  # track clicked letters in order
+    current_guess = []
 
     # ---------------- NEW TIMER SYSTEM ----------------
-    timer_seconds = max(10, len(possible_words) * 9)  # ensure min time
+    timer_seconds = max(10, len(possible_words) * 9)
     timer_font = pygame.font.Font(None, 40)
     time_bonus_per_letter = 2
     game_over = False
@@ -174,7 +178,6 @@ def main():
     for i, letter in enumerate(letters):
         x = start_x + i * (BUTTON_SIZE + BUTTON_MARGIN)
         y = letters_y
-        # store uppercase letter on button text
         letter_buttons.append(Button(x, y, BUTTON_SIZE, BUTTON_SIZE, letter.upper(), LIGHT_BLUE, BLUE, WHITE))
 
     # Action buttons
@@ -195,14 +198,17 @@ def main():
     for length, words in list(grouped.items()):
         grouped[length] = {"header": f"{length}-Letter Words", "words": words}
 
-    # Horizontal scroll control (prevents overlap)
+    # Horizontal scroll control
     scroll_offset = 0
     scroll_speed = 40
 
     # Floating animations for correct words
-    floating_texts = []  # each: {text, x, y, life, color, vx, vy}
+    floating_texts = []  # each: {text, x, y, life, color, vx, vy, max_life}
 
-    # Timer tick control (accurate second decrement)
+    # Per-word reveal animations: map word -> {tick, reveal_speed, max_tick}
+    reveal_animations = {}
+
+    # Timer tick control
     last_tick = pygame.time.get_ticks()
 
     running = True
@@ -221,9 +227,8 @@ def main():
         mouse_pos = pygame.mouse.get_pos()
         screen.fill(WHITE)
 
-        # If game over, go to name entry flow
+        # Game over / name-entry flow
         if game_over:
-            # Show GAME OVER and enter name screen
             name = ""
             entering_name = True
             while entering_name:
@@ -240,7 +245,7 @@ def main():
                 name_render = font.render(name, True, BLUE)
                 screen.blit(name_render, (WIDTH//2 - 140, 320))
 
-                # draw top scores on the side
+                # leaderboard
                 scores_list = load_scores()
                 heading = small_font.render("Leaderboard (Top 10)", True, DARK_GRAY)
                 screen.blit(heading, (WIDTH - 360, 120))
@@ -255,7 +260,6 @@ def main():
                         return
                     if event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_RETURN:
-                            # Save name and return to new game
                             if name.strip() == "":
                                 name = "ANON"
                             save_score(name.strip()[:12], score)
@@ -268,9 +272,8 @@ def main():
                             if ch.isprintable() and len(name) < 12:
                                 name += ch
                 clock.tick(FPS)
-            # end name entry
 
-        # Draw title and top info
+        # Top UI
         title = font.render("TEXT TWIST", True, BLUE)
         screen.blit(title, (100, 50))
         score_text = font.render(f"Score: {score}", True, BLACK)
@@ -280,7 +283,6 @@ def main():
         timer_text = timer_font.render(f"Time: {timer_seconds}", True, timer_color)
         screen.blit(timer_text, (WIDTH - 200, 70))
 
-        # Selected letters (center)
         selected_text = font.render("".join(current_guess).upper(), True, BLACK)
         text_rect = selected_text.get_rect(center=(WIDTH // 2, letters_y - 40))
         screen.blit(selected_text, text_rect)
@@ -295,7 +297,7 @@ def main():
             btn.check_hover(mouse_pos)
             btn.draw(screen, font)
 
-        # Draw word groups (with horizontal scrolling)
+        # Draw word groups with reveal animations
         panel_x = 40 - scroll_offset
         panel_y = 120
         panel_bottom = letters_y - 30
@@ -324,9 +326,40 @@ def main():
                 word_y = panel_y + row * row_height
 
                 wg = WordGroup(word, word_x, word_y)
-                if word in found_words:
-                    wg.fill_word()
-                wg.draw(screen, font)
+
+                # If word is found, show reveal animation (letters revealed progressively)
+                if word in found_words or word in bonus_found:
+                    anim = reveal_animations.get(word)
+                    if not anim:
+                        # initialize animation
+                        reveal_animations[word] = {"tick": 0, "max_tick": 12 + len(word)*4}
+                        anim = reveal_animations[word]
+                    # compute how many letters to reveal based on tick
+                    prog = anim["tick"] / anim["max_tick"]
+                    reveal_count = int(prog * len(word))
+                    reveal_count = max(0, min(len(word), reveal_count))
+                    # draw boxes; fill letters up to reveal_count
+                    for i, box in enumerate(wg.boxes):
+                        pygame.draw.rect(screen, WHITE, box.rect, border_radius=5)
+                        # border flash during reveal
+                        if anim["tick"] < anim["max_tick"]:
+                            border_color = GOLD if ((anim["tick"] // 3) % 2 == 0) else BLACK
+                        else:
+                            border_color = BLACK
+                        pygame.draw.rect(screen, border_color, box.rect, 3, border_radius=5)
+                        if i < reveal_count:
+                            # draw letter
+                            text_surface = font.render(word[i].upper(), True, BLACK)
+                            text_rect = text_surface.get_rect(center=box.rect.center)
+                            screen.blit(text_surface, text_rect)
+                    # advance tick
+                    anim["tick"] += 1
+                    if anim["tick"] > anim["max_tick"]:
+                        # fully reveal to ensure letters remain
+                        for i, ch in enumerate(word):
+                            wg.boxes[i].letter = ch
+                else:
+                    wg.draw(screen, font)
 
                 row += 1
                 if row >= max_rows:
@@ -337,7 +370,7 @@ def main():
             x_cursor += col_widths[idx] * total_subcols
             max_right = max(max_right, x_cursor)
 
-        # clamp scroll so we can't scroll past content
+        # clamp horizontal scroll
         scroll_offset = max(0, min(scroll_offset, max(0, max_right - WIDTH + 100)))
 
         # Messages
@@ -346,13 +379,13 @@ def main():
             screen.blit(msg_text, (100, 600))
             message_timer -= 1
 
-        # Floating animations
+        # Floating point animations
         for ft in floating_texts[:]:
             surf = font.render(ft["text"], True, ft["color"])
-            # apply alpha fade (simple approach)
             surf.set_alpha(max(0, int(255 * (ft["life"] / ft["max_life"]))))
             screen.blit(surf, (ft["x"], ft["y"]))
-            ft["y"] += ft["vy"]  # vy is negative (moves up)
+            ft["x"] += ft.get("vx", 0)
+            ft["y"] += ft.get("vy", -1)
             ft["life"] -= 1
             if ft["life"] <= 0:
                 floating_texts.remove(ft)
@@ -364,7 +397,6 @@ def main():
 
             # Mouse wheel -> horizontal scroll
             if event.type == pygame.MOUSEWHEEL:
-                # wheel upward -> scroll left (decrease offset)
                 scroll_offset -= event.y * scroll_speed
                 scroll_offset = max(0, min(scroll_offset, max(0, max_right - WIDTH + 100)))
 
@@ -372,7 +404,6 @@ def main():
             if event.type == pygame.KEYDOWN:
                 key = event.unicode.lower()
                 if key.isalpha() and len(key) == 1:
-                    # select only the first matching, unselected button
                     for button in letter_buttons:
                         if button.text.lower() == key and not button.is_selected:
                             button.is_selected = True
@@ -380,52 +411,76 @@ def main():
                             break
 
                 elif event.key == pygame.K_RETURN:
-                    guess = "".join(current_guess).lower()
-
-                    # BONUS word (in dictionary but not possible via given letters)
-                    if guess and guess in valid_words and guess not in possible_words:
-                        score += len(guess) * 5
-                        timer_seconds += len(guess)  # small time bonus
-                        message = f"Bonus! +{len(guess)*5} pts +{len(guess)}s"
-                        message_color = BLUE
-                        message_timer = 60
-                        # floating animation
-                        floating_texts.append({
-                            "text": f"+{len(guess)*5}",
-                            "x": WIDTH//2 + 60,
-                            "y": HEIGHT//2 - 20,
-                            "color": BLUE,
-                            "vy": -1.2,
-                            "life": 60,
-                            "max_life": 60
-                        })
-
-                    # Normal visible-word scoring
-                    elif guess and guess in possible_words and guess not in found_words:
-                        found_words.add(guess)
-                        pts = len(guess) * 10
-                        score += pts
-                        timer_seconds += len(guess) * time_bonus_per_letter
-                        message = f"Good! +{pts} pts +{len(guess)*time_bonus_per_letter}s"
-                        message_color = GREEN
-                        message_timer = 60
-                        # floating animation
-                        floating_texts.append({
-                            "text": f"+{pts}",
-                            "x": WIDTH//2,
-                            "y": HEIGHT//2 - 20,
-                            "color": GREEN,
-                            "vy": -1.4,
-                            "life": 60,
-                            "max_life": 60
-                        })
-
-                    else:
-                        message = "Invalid!"
+                    guess = "".join(current_guess).lower().strip()
+                    if not guess:
+                        message = "No input!"
                         message_color = RED
                         message_timer = 60
+                    else:
+                        # Already found (visible)
+                        if guess in found_words:
+                            message = "Already found!"
+                            message_color = DARK_GRAY
+                            message_timer = 60
 
-                    # clear selection
+                        # Already found as bonus
+                        elif guess in bonus_found:
+                            message = "Already found!"
+                            message_color = DARK_GRAY
+                            message_timer = 60
+
+                        # Bonus (in dictionary but not possible)
+                        elif guess in valid_words and guess not in possible_words:
+                            # accept only once
+                            bonus_found.add(guess)
+                            pts = len(guess) * 5
+                            score += pts
+                            timer_seconds += len(guess)
+                            message = f"Bonus! +{pts} pts +{len(guess)}s"
+                            message_color = BLUE
+                            message_timer = 90
+                            floating_texts.append({
+                                "text": f"+{pts}",
+                                "x": WIDTH//2 + 60,
+                                "y": HEIGHT//2 - 20,
+                                "color": BLUE,
+                                "vx": 0,
+                                "vy": -1.2,
+                                "life": 60,
+                                "max_life": 60
+                            })
+                            # trigger reveal animation so it looks like a found word
+                            reveal_animations[guess] = {"tick": 0, "max_tick": 12 + len(guess)*4}
+
+                        # Normal visible-word scoring
+                        elif guess in possible_words and guess not in found_words:
+                            found_words.add(guess)
+                            pts = len(guess) * 10
+                            score += pts
+                            timer_seconds += len(guess) * time_bonus_per_letter
+                            message = f"Good! +{pts} pts +{len(guess)*time_bonus_per_letter}s"
+                            message_color = GREEN
+                            message_timer = 90
+                            floating_texts.append({
+                                "text": f"+{pts}",
+                                "x": WIDTH//2,
+                                "y": HEIGHT//2 - 20,
+                                "color": GREEN,
+                                "vx": 0,
+                                "vy": -1.4,
+                                "life": 60,
+                                "max_life": 60
+                            })
+                            reveal_animations[guess] = {"tick": 0, "max_tick": 12 + len(guess)*4}
+
+                        else:
+                            # if it's in dictionary and in possible_words but already found handled above
+                            # else invalid
+                            message = "Invalid!"
+                            message_color = RED
+                            message_timer = 60
+
+                    # clear selection after pressing enter
                     current_guess = []
                     for b in letter_buttons:
                         b.is_selected = False
@@ -437,8 +492,8 @@ def main():
 
                 elif event.key == pygame.K_SPACE:
                     random.shuffle(letter_buttons)
-                    total_width = len(letter_buttons) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
-                    start_x_local = (WIDTH - total_width) // 2
+                    total_width_local = len(letter_buttons) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
+                    start_x_local = (WIDTH - total_width_local) // 2
                     for i, button in enumerate(letter_buttons):
                         button.rect.x = start_x_local + i * (BUTTON_SIZE + BUTTON_MARGIN)
 
@@ -446,83 +501,96 @@ def main():
                     return main()
 
             # Mouse interactions
-            # Letter clicks (mouse)
             for button in letter_buttons:
                 if button.is_clicked(mouse_pos, event):
                     if not button.is_selected:
                         button.is_selected = True
                         current_guess.append(button.text.lower())
                     else:
-                        # deselect, remove only one instance (first)
                         button.is_selected = False
                         if button.text.lower() in current_guess:
                             current_guess.remove(button.text.lower())
 
-            # Submit button clicked
+            # Submit button
             if submit_button.is_clicked(mouse_pos, event):
-                guess = "".join(current_guess).lower()
-
-                if guess and guess in valid_words and guess not in possible_words:
-                    score += len(guess) * 5
-                    timer_seconds += len(guess)
-                    message = f"Bonus! +{len(guess)*5} pts +{len(guess)}s"
-                    message_color = BLUE
-                    message_timer = 60
-                    floating_texts.append({
-                        "text": f"+{len(guess)*5}",
-                        "x": WIDTH//2 + 60,
-                        "y": HEIGHT//2 - 20,
-                        "color": BLUE,
-                        "vy": -1.2,
-                        "life": 60,
-                        "max_life": 60
-                    })
-
-                elif guess and guess in possible_words and guess not in found_words:
-                    found_words.add(guess)
-                    pts = len(guess) * 10
-                    score += pts
-                    timer_seconds += len(guess) * time_bonus_per_letter
-                    message = f"Good! +{pts} pts +{len(guess)*time_bonus_per_letter}s"
-                    message_color = GREEN
-                    message_timer = 60
-                    floating_texts.append({
-                        "text": f"+{pts}",
-                        "x": WIDTH//2,
-                        "y": HEIGHT//2 - 20,
-                        "color": GREEN,
-                        "vy": -1.4,
-                        "life": 60,
-                        "max_life": 60
-                    })
-                else:
-                    message = "Invalid!"
+                guess = "".join(current_guess).lower().strip()
+                if not guess:
+                    message = "No input!"
                     message_color = RED
                     message_timer = 60
+                else:
+                    if guess in found_words or guess in bonus_found:
+                        message = "Already found!"
+                        message_color = DARK_GRAY
+                        message_timer = 60
+
+                    elif guess in valid_words and guess not in possible_words:
+                        bonus_found.add(guess)
+                        pts = len(guess) * 5
+                        score += pts
+                        timer_seconds += len(guess)
+                        message = f"Bonus! +{pts} pts +{len(guess)}s"
+                        message_color = BLUE
+                        message_timer = 90
+                        floating_texts.append({
+                            "text": f"+{pts}",
+                            "x": WIDTH//2 + 60,
+                            "y": HEIGHT//2 - 20,
+                            "color": BLUE,
+                            "vx": 0,
+                            "vy": -1.2,
+                            "life": 60,
+                            "max_life": 60
+                        })
+                        reveal_animations[guess] = {"tick": 0, "max_tick": 12 + len(guess)*4}
+
+                    elif guess in possible_words and guess not in found_words:
+                        found_words.add(guess)
+                        pts = len(guess) * 10
+                        score += pts
+                        timer_seconds += len(guess) * time_bonus_per_letter
+                        message = f"Good! +{pts} pts +{len(guess)*time_bonus_per_letter}s"
+                        message_color = GREEN
+                        message_timer = 90
+                        floating_texts.append({
+                            "text": f"+{pts}",
+                            "x": WIDTH//2,
+                            "y": HEIGHT//2 - 20,
+                            "color": GREEN,
+                            "vx": 0,
+                            "vy": -1.4,
+                            "life": 60,
+                            "max_life": 60
+                        })
+                        reveal_animations[guess] = {"tick": 0, "max_tick": 12 + len(guess)*4}
+                    else:
+                        message = "Invalid!"
+                        message_color = RED
+                        message_timer = 60
 
                 current_guess = []
                 for b in letter_buttons:
                     b.is_selected = False
 
-            # Clear button
+            # Clear
             if clear_button.is_clicked(mouse_pos, event):
                 current_guess = []
                 for b in letter_buttons:
                     b.is_selected = False
 
-            # Shuffle button
+            # Shuffle
             if shuffle_button.is_clicked(mouse_pos, event):
                 random.shuffle(letter_buttons)
-                total_width = len(letter_buttons) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
-                start_x_local = (WIDTH - total_width) // 2
+                total_width_local = len(letter_buttons) * (BUTTON_SIZE + BUTTON_MARGIN) - BUTTON_MARGIN
+                start_x_local = (WIDTH - total_width_local) // 2
                 for i, button in enumerate(letter_buttons):
                     button.rect.x = start_x_local + i * (BUTTON_SIZE + BUTTON_MARGIN)
 
-            # New game button
+            # New game
             if new_game_button.is_clicked(mouse_pos, event):
                 return main()
 
-        # End events
+        # end events
 
         pygame.display.flip()
         clock.tick(FPS)
